@@ -65,8 +65,8 @@ restart_grafana
 # Get credentials for authentication
 get_credentials
 
-# Export data_source table to JSON and CSV files
-export_data_source_table
+# Export data sources
+export_data_sources
 
 # Upgrade Grafana from version 8.3.1 to 9.4.17
 change_grafana_version "$GRAFANA_9417_INSTALLATION"
@@ -74,11 +74,23 @@ change_grafana_version "$GRAFANA_9417_INSTALLATION"
 # Restart the grafana-server service
 restart_grafana
 
-# Export dashboard folder
-export-dashboard-folder
+# # Export dashboard folder
+export_dashboard_folder
 
 # Export contact points
 export-contact-points
 
 # Export alert rules
-export-alert-rules
+export_alert_rules
+
+# Downgrade Grafana from version 9.4.17 to 8.3.3
+change_grafana_version "$GRAFANA_833_INSTALLATION"
+
+# Setup PostgreSQL to Grafana database
+sed -i "s|url = postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE_SOURCE_2|url = postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE_SOURCE_1|" "$GRAFANA_CONFIG_FILE_PATH"
+
+# Restart the grafana-server service
+restart_grafana
+
+# Import data sources
+import_data_sources
