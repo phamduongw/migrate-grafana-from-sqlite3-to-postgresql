@@ -116,12 +116,12 @@ export_data_sources() {
     psql -d "$PGDATABASE_SOURCE_PHASE_2" -c "\copy data_source to '/data/dbdump/data_source_$DATA_SOURCE_NAME_PHASE_2.csv' DELIMITER ',' CSV HEADER;"
 }
 
-export_dashboard_folder() {
+export_dashboard_folders() {
     while IFS= read -r dashboard; do
         if response=$(curl -sSf -X GET -H "Authorization: Basic $CREDENTIALS" "$GRAFANA_URL/api/dashboards/uid/$dashboard"); then
             modified_dashboard=$(jq '. |= (.folderUid=.meta.folderUid) | del(.meta) | del(.dashboard.id) + {overwrite: true}' <<< "$response")
-            mkdir -p "dashboards_source_$DATA_SOURCE_NAME_PHASE_2"
-            echo "$modified_dashboard" > "dashboards_source_$DATA_SOURCE_NAME_PHASE_2/${dashboard}.json"
+            mkdir -p "dashboards_sources_$DATA_SOURCE_NAME_PHASE_2"
+            echo "$modified_dashboard" > "dashboards_sources_$DATA_SOURCE_NAME_PHASE_2/${dashboard}.json"
             echo "Dashboard ${dashboard} saved."
         else
             echo "Failed to fetch dashboard $dashboard. Skipping..."
@@ -140,11 +140,11 @@ export_dashboard_folder() {
     done < <(curl -sSf -X GET -H "Authorization: Basic $CREDENTIALS" "$GRAFANA_URL/api/folders" | jq -r '.[] | .uid')
 }
 
-export-contact-points() {
+export_contact_points() {
     while IFS= read -r contact; do
         CONTACT_UID="$(echo "$contact" | jq -r .uid)"
-        mkdir -p "contact_points_$DATA_SOURCE_NAME_PHASE_2"
-        echo "$contact" | jq '.' > "contact_points_$DATA_SOURCE_NAME_PHASE_2/contact-point-$CONTACT_UID.json"
+        mkdir -p "contact_points_$1"
+        echo "$contact" | jq '.' > "contact_points_$1/contact-point-$CONTACT_UID.json"
         echo "Contact point $CONTACT_UID saved."
     done < <(curl -sSf -X GET -H "Authorization: Basic $CREDENTIALS" "$GRAFANA_URL/api/v1/provisioning/contact-points" | jq -c '.[]')
 }
@@ -223,4 +223,49 @@ update_password_for_data_sources() {
         WHERE
             data_source.uid = q.uid
             AND data_source.name = '"$DATA_SOURCE_NAME_PHASE_2"_' || q.name;"
+}
+
+import_dashboard_folders() {
+    for folder in "folders_source_$DATA_SOURCE_NAME_PHASE_2"/*json ; do
+        if response=$(curl -sSf -X POST -H "Authorization: Basic $CREDENTIALS" -H "Content-type: application/json" "$GRAFANA_URL/api/folders" -d "@$folder"); then
+            echo "Folder $folder imported."
+        else
+            echo "Failed to import folder $folder. Skipping..."
+        fi
+    done
+
+    for dashboard in "dashboards_sources_$DATA_SOURCE_NAME_PHASE_2"/*json ; do
+        if response=$(curl -sSf -X POST -H "Authorization: Basic $CREDENTIALS" -H "Content-type: application/json" "$GRAFANA_URL/api/dashboards/db" -d "@$dashboard"); then
+            echo "Dashboard $dashboard imported."
+        else
+            echo "Failed to import dashboard $dashboard. Skipping..."
+        fi
+    done
+}
+
+update_contact_points() {
+    for contact_point in "contact_points_$1"/*.json; do
+        CONTACT_UID=$(jq -r .uid "$contact_point" | tr -d '"')
+        jq ".name |= \"$1_\(.)\"" "$contact_point" | \
+        curl -sSf -X PUT -H "Authorization: Basic $CREDENTIALS" -H "Content-type: application/json" "$GRAFANA_URL/api/v1/provisioning/contact-points/$CONTACT_UID" -d @- 2>/dev/null
+        echo "Contact point $contact_point updated."
+    done
+}
+
+import_contact_points() {
+    for contact_point in "contact_points_$1"/*.json; do
+        jq ".name |= \"$1_\(.)\"" "$contact_point" | \
+        curl -sSf -X POST -H "Authorization: Basic $CREDENTIALS" -H "Content-type: application/json" "${GRAFANA_URL}/api/v1/provisioning/contact-points" -d @- 2>/dev/null
+        echo "Contact point $contact_point imported."
+    done
+}
+
+import_alert_rules() {
+    for alert_rule in "alert_rules_$DATA_SOURCE_NAME_PHASE_2"/*json ; do
+        if response=$(curl -sSf -X POST -H "Authorization: Basic $CREDENTIALS" -H "Content-type: application/json" "$GRAFANA_URL/api/v1/provisioning/alert-rules" -d "@$alert_rule"); then
+            echo "Alert rule $alert_rule imported."
+        else
+            echo "Failed to import alert rule $alert_rule. Skipping..."
+        fi
+    done
 }
