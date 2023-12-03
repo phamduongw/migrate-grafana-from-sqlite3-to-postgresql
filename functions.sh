@@ -82,7 +82,7 @@ truncate_default_metadata() {
         "team_role"
         "temp_user"
         "test_data"
-        '"user"'
+        \"user\"
         "user_auth"
         "user_auth_token"
         "user_dashboard_views"
@@ -90,10 +90,6 @@ truncate_default_metadata() {
         "user_stats"
     )
     psql -d "$1" -c "TRUNCATE TABLE $(IFS=,; echo "${TABLES[*]}");"
-}
-
-rename_data_sources() {
-    psql -d "$1" -c "UPDATE data_source SET name = concat('$2_', name); SELECT name FROM data_source;"
 }
 
 get_credentials() {
@@ -117,7 +113,7 @@ export_data_sources() {
 
     mkdir -p "$DATABASE_DUMP"
     chown -R postgres. "$DATABASE_DUMP"
-    psql -d "$PGDATABASE_SOURCE_2" -c "\copy data_source to '/data/dbdump/data_source_$DATA_SOURCE_NAME_PHASE_2.csv' DELIMITER ',' CSV HEADER;"
+    psql -d "$PGDATABASE_SOURCE_PHASE_2" -c "\copy data_source to '/data/dbdump/data_source_$DATA_SOURCE_NAME_PHASE_2.csv' DELIMITER ',' CSV HEADER;"
 }
 
 export_dashboard_folder() {
@@ -174,6 +170,57 @@ import_data_sources() {
             echo "Failed to import datasource $data_source. Skipping..."
         fi
     done
+
+    psql -d "$PGDATABASE_SOURCE_PHASE_1" -c "
+        CREATE TABLE data_source_$DATA_SOURCE_NAME_PHASE_2 (
+            id SERIAL PRIMARY KEY,
+            org_id BIGINT,
+            version INTEGER,
+            type VARCHAR(255),
+            name VARCHAR(190),
+            access VARCHAR(255),
+            url VARCHAR(255),
+            password VARCHAR(255),
+            \"user\" VARCHAR(255),
+            database VARCHAR(255),
+            basic_auth BOOLEAN,
+            basic_auth_user VARCHAR(255),
+            basic_auth_password VARCHAR(255),
+            is_default BOOLEAN,
+            json_data TEXT,
+            created TIMESTAMP WITHOUT TIME ZONE,
+            updated TIMESTAMP WITHOUT TIME ZONE,
+            with_credentials BOOLEAN,
+            secure_json_data TEXT,
+            read_only BOOLEAN,
+            uid VARCHAR(40)
+        );"
+
+    psql -d "$PGDATABASE_SOURCE_PHASE_1" -c "\copy data_source_$DATA_SOURCE_NAME_PHASE_2 from '/data/dbdump/data_source_$DATA_SOURCE_NAME_PHASE_2.csv' DELIMITER ',' CSV HEADER;"
 }
 
-
+update_password_for_data_sources() {
+    psql -d "$PGDATABASE_SOURCE_PHASE_1" -c "
+        UPDATE data_source
+        SET
+            access=q.access,
+            url=q.url,
+            password=q.password,
+            \"user\"=q.\"user\",
+            database=q.database,
+            basic_auth=q.basic_auth,
+            basic_auth_user=q.basic_auth_user,
+            basic_auth_password=q.basic_auth_password,
+            is_default=q.is_default,
+            json_data=q.json_data,
+            created=q.created,
+            updated=q.updated,
+            with_credentials=q.with_credentials,
+            secure_json_data=q.secure_json_data,
+            read_only=q.read_only
+        FROM
+            (SELECT * FROM data_source_$DATA_SOURCE_NAME_PHASE_2) q
+        WHERE
+            data_source.uid = q.uid
+            AND data_source.name = '"$DATA_SOURCE_NAME_PHASE_2"_' || q.name;"
+}

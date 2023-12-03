@@ -5,8 +5,8 @@ export PGHOST="192.168.100.107"
 export PGPORT="5432"
 export PGUSER="grafana"
 export PGPASSWORD="oracle_4U"
-export PGDATABASE_SOURCE_1="grafana_35199"
-export PGDATABASE_SOURCE_2="grafana_2929"
+export PGDATABASE_SOURCE_PHASE_1="grafana_35199"
+export PGDATABASE_SOURCE_PHASE_2="grafana_2929"
 
 # Grafana Configurations
 export GRAFANA_URL="http://192.168.100.107:3000"
